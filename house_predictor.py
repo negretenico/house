@@ -2,4 +2,5 @@ from house import Model
 
 model = Model()
 
-model.do_ml()
+model.do_xg()
+model.do_linear()
