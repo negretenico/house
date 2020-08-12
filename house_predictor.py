@@ -2,5 +2,6 @@ from house import Model
 
 model = Model()
 
-model.do_xg()
-model.do_linear()
+model.do_xg(showPred= "N")
+model.do_linear(showPred ="N")
+model.do_poly(showPred = "N")
