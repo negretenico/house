@@ -7,29 +7,67 @@ import math
 import xgboost as xgb
 from sklearn.preprocessing  import StandardScaler, PolynomialFeatures
 from sklearn.utils import shuffle
+import itertools as tools
 class Model:
     def __init__(self):
-        self.db = pd.read_csv('houses.csv')
+        self.db = pd.read_csv('data.csv')
+        self. labels = np.array(self.db['price'].values) 
     def data(self):
         print(self.db.isnull().sum())
     def extracts_features(self):
-        listOfNames = ['bedrooms','bathrooms','sqft_living','sqft_lot','floors','waterfront','view','condition','sqft_above','sqft_basement']
         std = StandardScaler()
         features = np.array(self.db.drop(columns = [c for c in self.db.columns if c not in listOfNames]))
         std.fit(features)
         labels = np.array(self.db['price'].values)
         return features,labels
 
-    def do_linear(self,showPred):
-        best, features_test, lables_test = self.train_linear()
-        pickle_in = open("housePrices.pickle", "rb")
-        linear = pickle.load(pickle_in)
-        print("SKLearn Linear Regrssion")
-        print("Best Accurcay ",best)
-        predictions = linear.predict(features_test)
-        if (showPred == "Y"):
-            for x in range(len(predictions)):
-                print("We predicted ",predictions[x]," Actually was " ,lables_test[x])
+
+    def get_best_features(self):
+        feat_com = []
+        scores  = {}
+        listOfNames = ['bedrooms','bathrooms','sqft_living','sqft_lot','floors','waterfront','view','condition','sqft_above','sqft_basement']
+        df = self.db.drop(columns = [c for c in self.db.columns if c not in listOfNames])
+        std = StandardScaler()
+        for i in range(1,len(df.columns)):
+            feat_com.append(list(tools.combinations(df.columns,i)))
+        for i,combination in enumerate(feat_com):
+            print(i)
+            for entry in combination:
+                feature= np.array(df[list(entry)])
+                std.fit(feature)
+                best,test_feature,test_label = self.train_linear(feature)
+                scores[entry] = best
+        max_pair = max(scores,key = scores.get)
+        print(max_pair)
+        with open('bestcombination.txt', 'w') as f:
+            f.write(str(max_pair))
+        return max_pair
+    def do_linear(self):
+        best =0
+        with open('bestcombination.txt', 'r',encoding='utf8') as f:
+            columns = f.read()
+            columns = columns.replace("(","")
+            columns = columns.replace(")","")
+            columns = columns.replace("'","")
+            columns = columns.replace(" ","")
+            columns = columns.replace(")","")
+            columns = columns.replace("'","")
+            columns = columns.split(",")
+
+
+            df = self.db.drop(columns = [c for c in self.db.columns if c not in columns])
+            for i in range(0,1000):
+                # print(df.shape)
+                # print(self.labels.shape)
+                features_train, features_test, lables_train, lables_test = sklearn.model_selection.train_test_split(df, self.labels, test_size=0.1)
+                linear = linear_model.LinearRegression()
+                linear.fit(features_train,lables_train)
+                acc = linear.score(features_test,lables_test)
+                if best < acc:
+                    best = acc
+                    with open("skPickle.pickle", "wb") as f:
+                        pickle.dump(linear, f)
+                    print(best)
     def train_poly(self):
         features, labels = self.extracts_features()
         degree = 2
@@ -47,6 +85,7 @@ class Model:
             acc = model.score(poly_features_test,lables_test)
             if best< acc:
                 best  = acc
+                
         return prediction, best, lables_test
 
     def do_poly(self,showPred):
@@ -57,11 +96,10 @@ class Model:
             for x in range(len(pred)):
                 print("We predicted ", pred[x], " Actually was ", lables_test[x])
 
-    def train_linear(self):
+    def train_linear(self,feature):
         best = 0
-        features, lables = self.extracts_features()
         for i in range(0,100):
-            features_train, features_test, lables_train, lables_test = sklearn.model_selection.train_test_split(features, lables, test_size=0.1)
+            features_train, features_test, lables_train, lables_test = sklearn.model_selection.train_test_split(feature, self.labels, test_size=0.1)
             linear = linear_model.LinearRegression()
             linear.fit(features_train,lables_train)
             acc = linear.score(features_test, lables_test)
