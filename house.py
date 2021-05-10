@@ -2,16 +2,20 @@ import pandas as pd
 import numpy as np
 import sklearn
 import pickle
-from sklearn import linear_model
+from sklearn import linear_model 
 import math
 import xgboost as xgb
 from sklearn.preprocessing  import StandardScaler, PolynomialFeatures
 from sklearn.utils import shuffle
 import itertools as tools
+import warnings
+
+warnings.filterwarnings('ignore')
 class Model:
     def __init__(self):
         self.db = pd.read_csv('data.csv')
-        self. labels = np.array(self.db['price'].values) 
+        self. labels = np.array(self.db['price'].values)
+        self.degree = 2 
     def data(self):
         print(self.db.isnull().sum())
     def extracts_features(self):
@@ -42,8 +46,10 @@ class Model:
         with open('bestcombination.txt', 'w') as f:
             f.write(str(max_pair))
         return max_pair
-    def do_linear(self):
+  
+    def train_linear(self):
         best =0
+        print("Linear Regression Scores")
         with open('bestcombination.txt', 'r',encoding='utf8') as f:
             columns = f.read()
             columns = columns.replace("(","")
@@ -56,7 +62,7 @@ class Model:
 
 
             df = self.db.drop(columns = [c for c in self.db.columns if c not in columns])
-            for i in range(0,1000):
+            for i in range(0,2000):
                 # print(df.shape)
                 # print(self.labels.shape)
                 features_train, features_test, lables_train, lables_test = sklearn.model_selection.train_test_split(df, self.labels, test_size=0.1)
@@ -65,67 +71,80 @@ class Model:
                 acc = linear.score(features_test,lables_test)
                 if best < acc:
                     best = acc
-                    with open("skPickle.pickle", "wb") as f:
+                    with open("linear.pickle", "wb") as f:
                         pickle.dump(linear, f)
                     print(best)
+
     def train_poly(self):
-        features, labels = self.extracts_features()
-        degree = 2
         best =0
-        for i in range(0,100):
-            features_train, features_test, lables_train, lables_test = sklearn.model_selection.train_test_split(features,
-                                                                                                                labels,
-                                                                                                                test_size=0.1)
-            poly_features = PolynomialFeatures(degree)
-            poly_features_train = poly_features.fit_transform(features_train)
-            model = linear_model.LinearRegression()
-            model.fit(poly_features_train,lables_train)
-            poly_features_test = poly_features.fit_transform(features_test)
-            prediction = model.predict(poly_features_test)
-            acc = model.score(poly_features_test,lables_test)
-            if best< acc:
-                best  = acc
-                
-        return prediction, best, lables_test
+        print("Polynomial Model")
+        with open('bestcombination.txt', 'r',encoding='utf8') as f:
+            columns = f.read()
+            columns = columns.replace("(","")
+            columns = columns.replace(")","")
+            columns = columns.replace("'","")
+            columns = columns.replace(" ","")
+            columns = columns.replace(")","")
+            columns = columns.replace("'","")
+            columns = columns.split(",")
+            df = self.db.drop(columns = [c for c in self.db.columns if c not in columns])
+            for i in range(0,2000):
+                features_train, features_test, lables_train, lables_test = sklearn.model_selection.train_test_split(df,
+                                                                                                                    self.labels,
+                                                                                                                    test_size=0.1)
+                poly_features = PolynomialFeatures(self.degree)
+                poly_features_train = poly_features.fit_transform(features_train)
+                model = linear_model.LinearRegression()
+                model.fit(poly_features_train,lables_train)
+                poly_features_test = poly_features.fit_transform(features_test)
+                acc = model.score(poly_features_test,lables_test)
+                if best< acc:
+                    with open("polyModel.pickle", "wb") as f:
+                        pickle.dump(model, f)
+                    best  = acc
+                    print(best)    
 
-    def do_poly(self,showPred):
-        pred, acc, lables_test = self.train_poly()
-        print("Polynomial Regression")
-        print("Accuracy ", acc)
-        if(showPred == "Y"):
-            for x in range(len(pred)):
-                print("We predicted ", pred[x], " Actually was ", lables_test[x])
 
-    def train_linear(self,feature):
-        best = 0
-        for i in range(0,100):
-            features_train, features_test, lables_train, lables_test = sklearn.model_selection.train_test_split(feature, self.labels, test_size=0.1)
-            linear = linear_model.LinearRegression()
-            linear.fit(features_train,lables_train)
-            acc = linear.score(features_test, lables_test)
-            if best < acc:
-                best = acc
-                with open("housePrices.pickle", "wb") as f:
-                    pickle.dump(linear, f)
-        return best, features_test, lables_test
+    def predict(self,new_house):
+        linear_in = open("linear.pickle","rb")
+        linear_model = pickle.load(linear_in)
+        
+        poly_in =  open("polyModel.pickle","rb")
+        poly_model = pickle.load(poly_in)
+        
+        xg_in = open("XGBoostModel.pickle","rb")
+        xg_model = pickle.load(xg_in)
+
+        poly_features = PolynomialFeatures(self.degree)
+        
+        poly_pred = poly_model.predict(poly_features.fit_transform(new_house))
+        linear_pred = linear_model.predict(new_house)
+        xg_pred = xg_model.predict(np.asarray(new_house))
+        return max(poly_pred,linear_pred,xg_pred)
+
+
+
     def train_xg(self):
-        features, labels = self.extracts_features()
-        features_train, features_test, lables_train, lables_test = sklearn.model_selection.train_test_split(features, labels,
-                                                                                                    test_size=0.1)
-        xg_reg = xgb.XGBRegressor(objective='reg:linear', colsample_bytree=0.3, learning_rate=0.1,
-                                  max_depth=5, alpha=10, n_estimators=10)
-        xg_reg.fit(features_test,lables_test)
-        acc = xg_reg.score(features_test,lables_test)
-        with open("xgHousePrices.pickle", "wb") as f:
-            pickle.dump(xg_reg, f)
-        return acc, features_test, lables_test
-    def do_xg(self,showPred):
-        acc, features_test, lables_test = self.train_xg()
-        pickle_in = open("xgHousePrices.pickle", "rb")
-        xg_reg = pickle.load(pickle_in)
-        predictions = xg_reg.predict(features_test)
-        print("XGRegressor")
-        print("Accuracy ", acc)
-        if (showPred == "Y"):
-            for x in range(len(predictions)):
-                print("We predicted ",predictions[x]," Actually was " ,lables_test[x])
+        best =0
+        print("XGBoost Model")
+        with open('bestcombination.txt', 'r',encoding='utf8') as f:
+            columns = f.read()
+            columns = columns.replace("(","")
+            columns = columns.replace(")","")
+            columns = columns.replace("'","")
+            columns = columns.replace(" ","")
+            columns = columns.replace(")","")
+            columns = columns.replace("'","")
+            columns = columns.split(",")
+            df = self.db.drop(columns = [c for c in self.db.columns if c not in columns])
+            model = xgb.XGBRegressor(objective='reg:squarederror', colsample_bytree=0.8, learning_rate=0.1,
+                                max_depth=7, n_estimators=500,subsample = .7)
+            features_train, features_test, lables_train, lables_test = sklearn.model_selection.train_test_split(df,
+                                                                                                                self.labels,
+                                                                                                                test_size=0.1)
+            model.fit(features_test,lables_test)
+            acc = model.score(features_test,lables_test)
+
+            with open("XGBoostModel.pickle", "wb") as f:
+                pickle.dump(model, f)
+      
